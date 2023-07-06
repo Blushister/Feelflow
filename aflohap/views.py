@@ -1,23 +1,20 @@
-from django.shortcuts import render, redirect
-from django.http import HttpResponse
+import pickle
+
 from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
-# from django.contrib.auth.models import User
-from django.contrib.auth import authenticate, login, logout
-# from django.contrib.auth.forms import UserCreationForm
-from .models import Room, Topic, Message, User
-from .forms import RoomForm, UserForm, MyUserCreationForm
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer
 
-# Create your views here.
-
-# rooms = [
-#     {'id' : 1, 'name':'Texte 1'},
-#     {'id' : 2, 'name':'Texte 2'},
-#     {'id' : 3, 'name':'Texte 3'},
-# ]
+from .forms import MyUserCreationForm, RoomForm, UserForm
+from .models import Message, Room, Topic, User
 
 
+# Page de connexion
 def loginPage(request):
     page = 'login'
     if request.user.is_authenticated:
@@ -43,10 +40,12 @@ def loginPage(request):
     context = {'page':page}
     return render(request, 'pages/login_register.html', context)
 
+# Deconnexion de l'utilisateur
 def logoutUser(request):
     logout(request)
     return redirect('home')
 
+# Enregistrement de l'utilisateur
 def registerPage(request):
     form = MyUserCreationForm()
 
@@ -63,6 +62,7 @@ def registerPage(request):
 
     return render(request, 'pages/login_register.html', {'form':form})
 
+# Page d'acceuil
 def home(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
 
@@ -79,16 +79,33 @@ def home(request):
     context = {'rooms': rooms, 'topics': topics, 'room_count': room_count, 'room_messages': room_messages}
     return render(request, 'pages/home.html', context )
 
+# Charger le modèle et le vectorizer
+with open('C:\\Users\\curveo\\Documents\\webapp\\aflohap\\naive_bayes_model.pkl', 'rb') as f:
+    model = pickle.load(f)
+
+with open('C:\\Users\\curveo\\Documents\\webapp\\aflohap\\vectorizer.pkl', 'rb') as f:
+    vectorizer = pickle.load(f)
+
+# Gestion des salles
 def room(request, pk):
     room = Room.objects.get(id=pk)
     room_messages = room.message_set.all()
     participants = room.participants.all()
 
     if request.method == 'POST':
+        message_body = request.POST.get('body')
+
+        # Transforme le texte du message en vecteurs
+        message_vectors = vectorizer.transform([message_body])
+
+        # Prédiction du sentiment
+        sentiment = model.predict(message_vectors)
+
         message = Message.objects.create(
             user=request.user,
             room=room,
-            body=request.POST.get('body')
+            body=message_body,
+            sentiment='P' if sentiment[0] == 1 else 'N'  # 0 = Négative 1 = Positive
         )
         room.participants.add(request.user)
         return redirect('room', pk=room.id)
@@ -96,6 +113,7 @@ def room(request, pk):
     context = {'room': room, 'room_messages': room_messages, 'participants':participants}
     return render(request, 'pages/room.html', context)
 
+# Partie qui gere le profile de l'utilisateur ces messages poster sur quel salles est-il ext..
 def userProfile(request, pk):
     user = User.objects.get(id=pk)
     rooms = user.room_set.all()
@@ -104,6 +122,7 @@ def userProfile(request, pk):
     context = {'user': user, 'rooms': rooms, 'room_messages':room_messages, 'topics':topics}
     return render(request, 'pages/profile.html', context)
 
+# Partie pour la création de la salle
 @login_required(login_url='login')
 def createRoom(request):
     form = RoomForm()
@@ -119,18 +138,12 @@ def createRoom(request):
             name=request.POST.get('name'),
             description=request.POST.get('description'),
         )
-        # anciennement utilisé (avant l'utilisation de Room.objets.create)
-        # form = RoomForm(request.POST)
-        # if form.is_valid():
-        #     room = form.save(commit=False)
-        #     room.host = request.user
-        #     room.save()
-        #     return redirect('home')
         return redirect('home')
 
     context = {'form': form, 'topics':topics}
     return render(request, 'pages/room_form.html', context)
 
+# MAJ de la salles (changement de nom, de sujets) (User creator Only)
 @login_required(login_url='login')
 def updateRoom(request, pk):
     room = Room.objects.get(id=pk)
@@ -147,15 +160,12 @@ def updateRoom(request, pk):
         room.topic = topic
         room.description = request.POST.get('description')
         room.save()
-        # form = RoomForm(request.POST, instance=room)
-        # if form.is_valid():
-        #     form.save()
-        #     return redirect('home')
         return redirect('home')
 
     context = {'form' : form, 'topics':topics, 'room':room}
     return render(request, 'pages/room_form.html', context)
 
+# Partie pour la suppréssion d'une sale (User creator Only)
 @login_required(login_url='login')
 def deleteRoom(request, pk):
     room = Room.objects.get(id=pk)
@@ -169,6 +179,7 @@ def deleteRoom(request, pk):
 
     return render(request, "pages/delete.html", {'obj':room})
 
+# Partie pour la suppréssion d'un message (User creator Only)
 @login_required(login_url='login')
 def deleteMessage(request, pk):
     message = Message.objects.get(id=pk)
@@ -182,6 +193,7 @@ def deleteMessage(request, pk):
 
     return render(request, "pages/delete.html", {'obj':message})
 
+# Partie mise a jour du profile
 @login_required(login_url='login')
 def updateUser(request):
     user = request.user
@@ -194,11 +206,13 @@ def updateUser(request):
             return redirect('user-profile', pk=user.id)
     return render(request, 'pages/update-user.html', {'form':form})
 
+# Affichage de la liste des sujets de discutions
 def topicsPage(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
     topics = Topic.objects.filter(name__icontains=q)
     return render(request, 'pages/topics.html',{'topics':topics})
 
+# Affichage des derniers messages postée
 def activityPage(request):
     room_messages = Message.objects.all()
     return render(request,'pages/activity.html',{'room_messages':room_messages})

@@ -99,9 +99,11 @@
                                 </a>
                                 {% endif %}
                             </div>
-
                             <div class="thread__details">
                                 {{message.body}}
+                                <div class="message-sentiment">
+                                    Sentiment: {{message.sentiment}}
+                                </div>
                             </div>
                         </div>
                         {% endfor %}

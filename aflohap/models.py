@@ -1,8 +1,13 @@
-# from django.contrib.auth.models import User
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
 # Create your models here.
+
+"""
+MyuserManager permet de s'assurer que a l'enregistrement 
+l'utilisateur définis bien un email car il est néssecaire a la connexion (il faut se connecter avec un mail et non un username)
+et permet aussi de crée facilement via la commande python manage.py createsuperuser de bien crée un compte administrateur avec un email et non un username
+"""
 
 class MyUserManager(BaseUserManager):
     def _create_user(self, email, password, **extra_fields):
@@ -24,6 +29,7 @@ class MyUserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         return self._create_user(email, password, **extra_fields)
 
+# Création de classe User héritant de la classe AbstactUser
 class User(AbstractUser):
     name = models.CharField(max_length=200, null=True)
     email = models.EmailField(unique=True, null=True)
@@ -39,6 +45,7 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+# Topic est la partie qui affiche la liste des sujets de conversation
 
 class Topic(models.Model):
     name = models.CharField(max_length=200)
@@ -62,10 +69,18 @@ class Room(models.Model):
     def __str__(self):
         return self.name
 
+"""
+Partie de gestion du stockages des message en BDD
+
+Body = Text du message
+sentiment = Le sentiment analyser via notre modèle d'ia
+"""
+
 class Message(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     room = models.ForeignKey(Room, on_delete=models.CASCADE)
     body = models.TextField()
+    sentiment = models.CharField(max_length=1, choices=[('P', 'Positive'), ('N', 'Negative')], default='P')
     updated = models.DateTimeField(auto_now=True)
     created = models.DateTimeField(auto_now_add=True)
 

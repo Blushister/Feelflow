@@ -1,27 +1,13 @@
+from aflohap.models import Message, Room
 from rest_framework.serializers import ModelSerializer
-from aflohap.models import Room
+
 
 class RoomSerializer(ModelSerializer):
     class Meta:
         model = Room
         fields = '__all__'
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+class MessageSerializer(ModelSerializer):
+    class Meta:
+        model = Message
+        fields = '__all__'
