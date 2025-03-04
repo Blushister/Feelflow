@@ -30,6 +30,7 @@ class MyUserManager(BaseUserManager):
         return self._create_user(email, password, **extra_fields)
 
 # Création de classe User héritant de la classe AbstactUser
+# Pas beau lo
 class User(AbstractUser):
     name = models.CharField(max_length=200, null=True)
     email = models.EmailField(unique=True, null=True)
